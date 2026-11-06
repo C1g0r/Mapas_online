@@ -2729,7 +2729,7 @@ function oxRestore(){
   return null;
 }
 // --- ecrãs (antes de entrar) ---
-function oxShell(inner,sub){return '<div class="auth"><div class="auth-card"><img class="auth-logo" src="'+LOGO+'" alt="Carlos Baltazar"><h1>Mapa de Horários</h1><div class="auth-sub">'+(sub||'Acesso reservado a colaboradores da Carlos Baltazar')+'</div>'+inner+'</div><div class="auth-foot">Autor e desenvolvimento: Andreia Catalão · Versão 05112026</div></div>'}
+function oxShell(inner,sub){return '<div class="auth"><div class="auth-card"><img class="auth-logo" src="'+LOGO+'" alt="Carlos Baltazar"><h1>Mapa de Horários</h1><div class="auth-sub">'+(sub||'Acesso reservado a colaboradores<br>Carlos Baltazar')+'</div>'+inner+'</div><div class="auth-foot">Autor e desenvolvimento: Andreia Catalão</div></div>'}
 function oxMsg(m,err){return m?'<div class="auth-msg'+(err?' err':'')+'">'+m+'</div>':''}
 function oxBind(formId,fn){var f=document.getElementById(formId);if(!f)return;f.onsubmit=function(ev){ev.preventDefault();fn(f)};var i=f.querySelector('input');if(i)setTimeout(function(){i.focus()},30)}
 function oxRegister(msg){
@@ -3037,7 +3037,7 @@ function subscribeRemote(){
 }
 
 // ---------- ecrãs de entrada ----------
-function authShell(inner){return '<div class="auth"><div class="auth-card"><img class="auth-logo" src="'+LOGO+'" alt="Carlos Baltazar"><h1>Mapa de Horários</h1><div class="auth-sub">Acesso reservado a colaboradores da Carlos Baltazar</div>'+inner+'</div><div class="auth-foot">Autor e desenvolvimento: Andreia Catalão · Versão 05112026</div></div>'}
+function authShell(inner){return '<div class="auth"><div class="auth-card"><img class="auth-logo" src="'+LOGO+'" alt="Carlos Baltazar"><h1>Mapa de Horários</h1><div class="auth-sub">Acesso reservado a colaboradores<br>Carlos Baltazar</div>'+inner+'</div><div class="auth-foot">Autor e desenvolvimento: Andreia Catalão</div></div>'}
 function renderLogin(msg,isErr){
   app.innerHTML=authShell('<form id="lf" class="auth-f"><label>Email</label><input type="email" id="le" autocomplete="username" required><label>Palavra-passe</label><input type="password" id="lp" autocomplete="current-password" required>'+(msg?'<div class="auth-msg'+(isErr?' err':'')+'">'+msg+'</div>':'')+'<button class="btn pri" type="submit">Entrar</button><button class="btn ghost" type="button" id="lforgot">Esqueci-me da palavra-passe</button></form>');
   var f=document.getElementById('lf');
