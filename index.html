@@ -2916,6 +2916,205 @@ var _toolsInputOX=toolsInput;toolsInput=function(ev){if(!ONLINE&&oxInput(ev))ret
 // Enter no diálogo da palavra-passe
 modal.addEventListener('keydown',function(ev){if(ev.key==='Enter'&&modal.dataset.kind==='oxpw'){var b=modal.querySelector('[data-m=oxpwok]');if(b)b.click()}});
 
+
+// =====================================================================
+// ---------- EXCEL NO FORMATO ORIGINAL (sem internet) ----------
+// Gera .xlsx com o mesmo aspeto dos ficheiros originais:
+//  · Mapa de Horários: um ficheiro por localidade, uma folha por mês (ex.: Outubro_2027)
+//  · Horários dos Postos: um ficheiro, uma folha por posto, meses um por baixo do outro
+// =====================================================================
+function XW(){this.sheets=[];this.fonts=['<font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'];this.fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'];this.borders=['<border><left/><right/><top/><bottom/><diagonal/></border>'];this.xfs=['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];this.key={'':0}}
+XW.prototype.sid=function(o){
+  o=o||{};var k=JSON.stringify(o);if(this.key[k]!=null)return this.key[k];
+  var f='<font>'+(o.b?'<b/>':'')+(o.i?'<i/>':'')+'<sz val="'+(o.sz||11)+'"/><color rgb="'+(o.color||'FF000000')+'"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>';
+  var fi=this.fonts.indexOf(f);if(fi<0){this.fonts.push(f);fi=this.fonts.length-1}
+  var fl2=0;if(o.fill){var x='<fill><patternFill patternType="solid"><fgColor rgb="'+o.fill+'"/><bgColor indexed="64"/></patternFill></fill>';fl2=this.fills.indexOf(x);if(fl2<0){this.fills.push(x);fl2=this.fills.length-1}}
+  var bd=o.bd==='all'?{l:1,r:1,t:1,b:1}:(o.bd||{});
+  var side=function(n,on){return on?'<'+n+' style="thin"><color indexed="64"/></'+n+'>':'<'+n+'/>'};
+  var bx='<border>'+side('left',bd.l)+side('right',bd.r)+side('top',bd.t)+side('bottom',bd.b)+'<diagonal/></border>';
+  var bi=this.borders.indexOf(bx);if(bi<0){this.borders.push(bx);bi=this.borders.length-1}
+  var al=(o.h||o.v||o.wrap)?'<alignment'+(o.h?' horizontal="'+o.h+'"':'')+' vertical="'+(o.v||'center')+'"'+(o.wrap?' wrapText="1"':'')+'/>':'';
+  this.xfs.push('<xf numFmtId="0" fontId="'+fi+'" fillId="'+fl2+'" borderId="'+bi+'" xfId="0" applyFont="1"'+(fl2?' applyFill="1"':'')+(bi?' applyBorder="1"':'')+(al?' applyAlignment="1">'+al+'</xf>':'/>'));
+  return this.key[k]=this.xfs.length-1;
+};
+XW.prototype.sheet=function(name){var s={name:name,rows:{},merges:[],cols:[],brk:[],setup:{}};this.sheets.push(s);return s};
+function xcol(c){var s='';c++;while(c>0){var m=(c-1)%26;s=String.fromCharCode(65+m)+s;c=Math.floor((c-1)/26)}return s}
+function xesc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'')}
+function xput(wb,s,r,c,v,st){var R=s.rows[r]=s.rows[r]||{c:{}};R.c[c]={v:v,s:wb.sid(st)}}
+function xmerge(wb,s,r,c1,c2,v,st,r2){for(var rr=r;rr<=(r2||r);rr++)for(var c=c1;c<=c2;c++)xput(wb,s,rr,c,(rr===r&&c===c1)?v:null,st);if(c2>c1||(r2&&r2>r))s.merges.push(xcol(c1)+(r+1)+':'+xcol(c2)+((r2||r)+1))}
+function xht(s,r,h){var R=s.rows[r]=s.rows[r]||{c:{}};R.ht=h}
+XW.prototype.sheetXml=function(s){
+  var rows=Object.keys(s.rows).map(Number).sort(function(a,b){return a-b});
+  var x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+  x+='<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0"'+(s.zoom?' zoomScale="'+s.zoom+'" zoomScaleNormal="'+s.zoom+'"':'')+(s.grid===false?' showGridLines="0"':'')+'/></sheetViews><sheetFormatPr defaultRowHeight="15"/>';
+  if(s.cols.length)x+='<cols>'+s.cols.map(function(c){return '<col min="'+c[0]+'" max="'+c[1]+'" width="'+c[2]+'" customWidth="1"/>'}).join('')+'</cols>';
+  x+='<sheetData>';
+  rows.forEach(function(r){var R=s.rows[r];x+='<row r="'+(r+1)+'"'+(R.ht?' ht="'+R.ht+'" customHeight="1"':'')+'>';
+    Object.keys(R.c).map(Number).sort(function(a,b){return a-b}).forEach(function(c){var C=R.c[c],ref=xcol(c)+(r+1);
+      if(C.v===null||C.v===undefined||C.v==='')x+='<c r="'+ref+'" s="'+C.s+'"/>';
+      else if(typeof C.v==='number')x+='<c r="'+ref+'" s="'+C.s+'"><v>'+C.v+'</v></c>';
+      else x+='<c r="'+ref+'" s="'+C.s+'" t="inlineStr"><is><t xml:space="preserve">'+xesc(C.v)+'</t></is></c>'});
+    x+='</row>'});
+  x+='</sheetData>';
+  if(s.merges.length)x+='<mergeCells count="'+s.merges.length+'">'+s.merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>';
+  var m=s.setup.margins||[0.31,0.12,0.16,0.16];
+  x+='<printOptions horizontalCentered="1"/><pageMargins left="'+m[0]+'" right="'+m[1]+'" top="'+m[2]+'" bottom="'+m[3]+'" header="0.3" footer="0.3"/>';
+  x+='<pageSetup paperSize="9" orientation="'+(s.setup.orient||'portrait')+'" fitToWidth="1" fitToHeight="'+(s.setup.fitH==null?1:s.setup.fitH)+'"/>';
+  if(s.brk.length)x+='<rowBreaks count="'+s.brk.length+'" manualBreakCount="'+s.brk.length+'">'+s.brk.map(function(r){return '<brk id="'+r+'" max="16383" man="1"/>'}).join('')+'</rowBreaks>';
+  return x+'</worksheet>';
+};
+XW.prototype.build=function(){
+  var self=this,files=[],enc=new TextEncoder();
+  var add=function(n,t){files.push({n:n,d:enc.encode(t)})};
+  var seen={};this.sheets.forEach(function(s){var b=s.name.replace(/[\\\/\?\*\[\]:]/g,'-').slice(0,31),n=b,k=2;while(seen[n.toLowerCase()]){n=b.slice(0,28)+' ('+k+++')'}seen[n.toLowerCase()]=1;s.name=n});
+  add('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+this.sheets.map(function(s,i){return '<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'}).join('')+'<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>');
+  add('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>');
+  var now=new Date().toISOString().replace(/\.\d+Z$/,'Z');
+  add('docProps/core.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Mapa de Horários</dc:title><dc:creator>Carlos Baltazar Furtado Guerreiro, Lda.</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">'+now+'</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">'+now+'</dcterms:modified></cp:coreProperties>');
+  add('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="'+(this.active||0)+'"/></bookViews><sheets>'+this.sheets.map(function(s,i){return '<sheet name="'+xesc(s.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>'}).join('')+'</sheets></workbook>');
+  add('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+this.sheets.map(function(s,i){return '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>'}).join('')+'<Relationship Id="rId'+(this.sheets.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  this.sheets.forEach(function(s,i){add('xl/worksheets/sheet'+(i+1)+'.xml',self.sheetXml(s))});
+  add('xl/styles.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="'+this.fonts.length+'">'+this.fonts.join('')+'</fonts><fills count="'+this.fills.length+'">'+this.fills.join('')+'</fills><borders count="'+this.borders.length+'">'+this.borders.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+this.xfs.length+'">'+this.xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
+  return zipStore(files);
+};
+var CRCT=null;
+function crc32(d){if(!CRCT){CRCT=new Uint32Array(256);for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;CRCT[n]=c>>>0}}var c=0xFFFFFFFF;for(var i=0;i<d.length;i++)c=CRCT[(c^d[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+function zipStore(files){
+  var enc=new TextEncoder(),parts=[],cen=[],off=0;
+  var u16=function(v){return [v&255,(v>>>8)&255]},u32=function(v){return [v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255]};
+  files.forEach(function(f){var nm=enc.encode(f.n),crc=crc32(f.d),sz=f.d.length;
+    var lh=[].concat(u32(0x04034b50),u16(20),u16(0x0800),u16(0),u16(0),u16(0x21),u32(crc),u32(sz),u32(sz),u16(nm.length),u16(0));
+    parts.push(new Uint8Array(lh),nm,f.d);
+    cen.push([].concat(u32(0x02014b50),u16(20),u16(20),u16(0x0800),u16(0),u16(0),u16(0x21),u32(crc),u32(sz),u32(sz),u16(nm.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(off)),nm);
+    off+=lh.length+nm.length+sz});
+  var cs=0;cen.forEach(function(c,i){if(i%2===0){parts.push(new Uint8Array(c));cs+=c.length}else{parts.push(c);cs+=c.length}});
+  parts.push(new Uint8Array([].concat(u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(cs),u32(off),u16(0))));
+  var tot=0;parts.forEach(function(p){tot+=p.length});var out=new Uint8Array(tot),p=0;parts.forEach(function(x){out.set(x,p);p+=x.length});return out;
+}
+function xDownload(bytes,name){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){a.remove()},500)}
+// ---------- estilos (iguais aos ficheiros originais) ----------
+var XS={
+  title:{b:1,sz:12,h:'center'},txt:{},bold:{b:1},
+  week:{b:1,h:'left',bd:{b:1}},
+  hdN:{fill:'FFBFBFBF',bd:'all'},hdD:{fill:'FFBFBFBF',h:'center',bd:'all'},hdH:{fill:'FFFFC000',h:'center',bd:'all',b:1},hdT:{fill:'FFBFBFBF',h:'center',bd:'all',sz:10},
+  name:{bd:'all'},tot:{h:'center',bd:'all'},
+  M:{b:1,sz:10,fill:'FFFFFF99',h:'center',bd:'all'},T:{b:1,sz:10,fill:'FFF4B183',h:'center',bd:'all'},
+  FC:{sz:8,h:'center',bd:'all'},FO:{sz:8,h:'center',bd:'all'},F:{b:1,sz:10,fill:'FFD9D9D9',h:'center',bd:'all'},B:{b:1,sz:10,fill:'FFE4DFEC',h:'center',bd:'all'},
+  ENC:{b:1,sz:9,fill:'FFF2F2F2',h:'center',bd:'all'},X:{b:1,sz:10,h:'center',bd:'all'},
+  nmH:{b:1,h:'center',bd:'all'},nmL:{h:'left',bd:'all'},nmC:{h:'center',bd:'all'},
+  foot1:{b:1,sz:12,h:'center'},foot2:{b:1,h:'left'},obsT:{b:1,sz:10},obs:{sz:10,color:'FFC00000'},hol:{sz:10,i:1}
+};
+function xWeekTitle(w){var a=new Date(w.days[0]),b=new Date(w.days[6]),am=a.getUTCMonth(),bm=b.getUTCMonth();
+  var d2=function(x){return pad(x.getUTCDate())};
+  return 'Semana '+pad(w.num)+' ('+(am===bm?d2(a)+' a '+d2(b)+' de '+MES[bm]:a.getUTCDate()+' de '+MES[am]+(a.getUTCFullYear()!==b.getUTCFullYear()?'/'+a.getUTCFullYear():'')+' a '+b.getUTCDate()+' de '+MES[bm])+'/'+b.getUTCFullYear()+')'}
+function xMapaSheet(wb,m,mo){
+  var s=wb.sheet(MES[mo]+'_'+ui.year);s.setup={orient:'landscape',fitH:1,margins:[0.31,0.12,0.16,0.16]};s.zoom=80;
+  s.cols=[[1,1,7.125],[2,2,18.125],[3,9,17.5],[10,10,9.125],[11,11,8.125]];
+  var r=0;
+  xmerge(wb,s,r,1,9,'MAPA DE HORÁRIO DE TRABALHO',XS.title);xht(s,r,15.75);r=2;
+  for(var i=0;i<5;i++){xput(wb,s,r,1,CO_L[i],i===4?XS.bold:XS.txt);if(m.cct[i])xput(wb,s,r,7,m.cct[i],i===0?XS.bold:XS.txt);r++}
+  xput(wb,s,r,1,'          46710 - Comercio por grosso de produtos petrolíferos',XS.bold);r+=2;
+  var fn=Math.max(m.func.length,2);
+  for(var j=0;j<fn;j++){if(m.func[j])xput(wb,s,r+j,1,(/^\s/.test(m.func[j])?'          ':'')+m.func[j].trim(),XS.txt);}
+  xput(wb,s,r,6,'Turnos Rotativos:',XS.bold);xput(wb,s,r,7,m.tM,XS.txt);xput(wb,s,r+1,7,m.tT,XS.txt);r+=fn+1;
+  var obs=[],n=0,hols=[];
+  function mk(text,who,when){if(!text)return '';n++;obs.push('('+n+') '+who+' — '+when+': '+String(text).replace(/\s*\n\s*/g,' · '));return ' ('+n+')'}
+  WEEKS.filter(function(w){return w.month===mo}).forEach(function(w){
+    xmerge(wb,s,r,1,9,xWeekTitle(w),XS.week);xht(s,r,15);r++;
+    xput(wb,s,r,1,'Trabalhador',XS.hdN);
+    w.days.forEach(function(t,d){var hk=HOL[key(t)];xput(wb,s,r,2+d,DIAS[d],hk?XS.hdH:XS.hdD);if(hk&&hols.indexOf(key(t))<0){hols.push(key(t));obs.push('Feriado: '+dmy(t)+' — '+hk)}});
+    xput(wb,s,r,9,'TOTAL H.',XS.hdT);xht(s,r,15);r++;
+    m.employees.filter(function(e){return showEmp(e,w)}).forEach(function(e){var tot=0;
+      xput(wb,s,r,1,e.name+mk(state.notes[noteKey(e,w,'n')],e.name,'Semana '+w.num),XS.name);
+      for(var d=0;d<7;d++){var v=val(e,w,d);tot+=hrsOf(e,v);
+        var tx=(v==='X'?'---------------------':CODES[v].x)+mk(state.notes[noteKey(e,w,d)],e.name,DIAS[d]+' '+dmy(w.days[d]).slice(0,5));
+        xput(wb,s,r,2+d,tx,XS[v]||XS.X)}
+      xput(wb,s,r,9,Math.round(tot*10)/10,XS.tot);xht(s,r,15);r++});
+    r++;
+  });
+  // tabela de nomes
+  r++;xmerge(wb,s,r,1,2,'NOME',XS.nmH);xmerge(wb,s,r,3,4,'CATEGORIA',XS.nmH);xmerge(wb,s,r,5,8,'INTERVALOS PARA REFEIÇÕES',XS.nmH);r++;
+  var list=[];m.employees.forEach(function(e,i){if(showEmpMonth(e,mo))list.push([(m.star?'* ':'')+(e.full||e.name),e.cat||'',m.ints[i]||''])});
+  (m.extra||[]).forEach(function(x){list.push([x.full,x.cat||'',x.int||''])});
+  var ints=list.map(function(x){return x[2]}).filter(function(x,i,a){return x&&a.indexOf(x)===i});
+  list.forEach(function(x,i){var last=i===list.length-1;
+    xmerge(wb,s,r,1,2,x[0],XS.nmL);xmerge(wb,s,r,3,4,x[1],XS.nmC);
+    xmerge(wb,s,r,5,8,ints[i]||'',{h:'center',bd:{l:1,r:1,t:i===0?1:0,b:last?1:0}});r++});
+  r++;
+  (m.foot||[]).filter(function(l){return l.trim()}).forEach(function(l,i){if(i===0){xmerge(wb,s,r,1,8,l,XS.foot1);xht(s,r,15.75)}else xput(wb,s,r,1,l,XS.foot2);r+=2});
+  if(obs.length){xput(wb,s,r,1,'Observações:',XS.obsT);r++;obs.forEach(function(o){xput(wb,s,r,1,o,/^Feriado/.test(o)?XS.hol:XS.obs);r++})}
+  return s;
+}
+var XP={
+  mes:{b:1,sz:16,h:'center'},hor:{b:1,sz:10,fill:'FFFFFF99',h:'center',bd:'all'},
+  hd:{b:1,sz:10,fill:'FFC0C0C0',h:'center',bd:'all'},hdx:{b:1,sz:10,fill:'FFD9D9D9',h:'center',bd:'all'},
+  dn:{b:1,sz:10,h:'center',bd:'all'},v:{sz:10,h:'center',bd:'all'},vx:{sz:10,fill:'FFD9D9D9',h:'center',bd:'all'},vxf:{sz:10,h:'center',bd:'all'},
+  dnH:{b:1,sz:10,fill:'FFFFC000',h:'center',bd:'all'},vH:{sz:10,fill:'FFFFC000',h:'center',bd:'all'},
+  enc:{b:1,sz:10,h:'center',bd:'all'},cob:{sz:10,b:1,fill:'FFB4C6E7',h:'center',bd:'all'},
+  obs:{b:1,sz:10,color:'FFFF0000'},hol:{sz:10,i:1}
+};
+function xPostoSheet(wb,p,months){
+  var s=wb.sheet(p.name);s.setup={orient:'portrait',fitH:0,margins:[0.5,0.3,0.4,0.4]};
+  var cols=pcols(p),nc=cols.length;
+  s.cols=[[1,1,6.5],[2,2,16.43]];cols.forEach(function(c,i){s.cols.push([3+i,3+i,c.c==='M'||c.c==='T'?18.14:c.c==='F'?14.71:15.43])});
+  var r=1;
+  months.forEach(function(mo,bi){
+    if(bi>0){s.brk.push(r);}
+    xmerge(wb,s,r,0,3,'Mês: '+MES[mo]+' '+ui.year,XP.mes);xht(s,r,20.25);r++;
+    xmerge(wb,s,r,0,3,'Local: '+p.name,XP.mes);xht(s,r,20.25);r+=2;
+    xmerge(wb,s,r,2,3,'Horário',XP.hor);r++;
+    xmerge(wb,s,r,0,1,'Dias',XP.hd);
+    cols.forEach(function(c,i){xput(wb,s,r,2+i,c.c==='M'||c.c==='T'?(c.s||c.l):c.l,c.extra?XP.hdx:XP.hd)});r++;
+    var obs=[],n=0;
+    monthDays(mo).forEach(function(t){var hk=HOL[key(t)],wd=dow(t);
+      xput(wb,s,r,0,new Date(t).getUTCDate(),hk?XP.dnH:XP.dn);xput(wb,s,r,1,DIASF[wd].charAt(0).toUpperCase()+DIASF[wd].slice(1),hk?XP.dnH:XP.dn);
+      if(hk)obs.push({h:1,t:'Feriado: '+dmy(t).slice(0,5)+' — '+hk});
+      var vm=pval(p,t,'M'),vt=pval(p,t,'T');
+      cols.forEach(function(c,i){
+        if(c.c==='T'&&vm==='ENC'&&vt==='ENC')return;
+        var v=pval(p,t,c.c),tx=ptext(p,v).replace(/^Encerrado$/i,'ENCERRADO').trim(),nt=state.pnotes[pkey(p,t,c.c)],st;
+        if(nt){n++;tx+=' ('+n+')';obs.push({t:'('+n+') '+dmy(t).slice(0,5)+' · '+c.l+': '+String(nt).replace(/\s*\n\s*/g,' · ')})}
+        if(c.c==='M'&&vm==='ENC'&&vt==='ENC'){xmerge(wb,s,r,2,3,'ENCERRADO',hk?XP.vH:XP.enc);return}
+        if(hk)st=XP.vH;else if(c.extra)st=tx?XP.vxf:XP.vx;else if(nt&&/^Cobre /m.test(nt))st=XP.cob;else st=v==='ENC'?XP.enc:XP.v;
+        xput(wb,s,r,2+i,tx,st)});
+      r++});
+    obs.forEach(function(o){xput(wb,s,r,2,o.t,o.h?XP.hol:XP.obs);r++});
+    r+=2;
+  });
+  return s;
+}
+// ---------- diálogo ----------
+function openExcel(){
+  var sec=ui.section==='postos'?'postos':'mapa';
+  var h='<div class="mbox" style="width:min(560px,100%)"><div class="mh"><h3>Exportar para Excel</h3><button class="btn ghost" data-m="close">Fechar ✕</button></div><div class="mb">';
+  h+='<div class="hint">O Excel sai no <b>formato original</b> — cabeçalho, cores e limites das células como nos ficheiros que a empresa já usa — e não precisa de internet.</div>';
+  h+='<div class="sec-t">O que exportar</div><div class="pr-opts">'+
+    '<label class="pr-opt"><input type="radio" name="xt" value="mapa"'+(sec==='mapa'?' checked':'')+'><span><b>Mapa de Horários</b><small>Um ficheiro por localidade · uma folha por mês</small></span></label>'+
+    '<label class="pr-opt"><input type="radio" name="xt" value="postos"'+(sec==='postos'?' checked':'')+'><span><b>Horários dos Postos</b><small>Um ficheiro · uma folha por posto · meses seguidos</small></span></label></div>';
+  h+='<div class="sec-t">Localidades</div><div class="pr-opts"><label class="pr-opt"><input type="radio" name="xl" value="cur" checked><span><b>Só a atual</b><small id="xlcur">'+esc(sec==='postos'?curPosto().name:curMapa().name)+'</small></span></label><label class="pr-opt"><input type="radio" name="xl" value="all"><span><b>Todas</b><small id="xlall">'+(sec==='postos'?'Todas no mesmo ficheiro':'9 ficheiros, um por localidade')+'</small></span></label></div>';
+  h+='<div class="sec-t">Meses de '+ui.year+'</div><div class="pr-opts"><label class="pr-opt"><input type="radio" name="xm" value="all" checked><span><b>Ano inteiro</b><small>Janeiro a Dezembro</small></span></label><label class="pr-opt"><input type="radio" name="xm" value="cur"><span><b>Só '+MES[ui.month]+'</b><small>O mês que está a ver</small></span></label></div>';
+  h+='<div class="row" style="margin-top:16px"><button class="btn" data-m="close">Cancelar</button><button class="btn pri" data-m="xlsgo">⬇ Descarregar Excel</button></div></div></div>';
+  modal.innerHTML=h;modal.hidden=false;modal.dataset.kind='xls';
+}
+function xlsGo(){
+  var tp=(modal.querySelector('input[name=xt]:checked')||{}).value||'mapa',lc=(modal.querySelector('input[name=xl]:checked')||{}).value,mm=(modal.querySelector('input[name=xm]:checked')||{}).value;
+  var months=mm==='cur'?[ui.month]:[0,1,2,3,4,5,6,7,8,9,10,11],suf=(mm==='cur'?'_'+MES[ui.month]:'')+'_'+ui.year;
+  closeModal();
+  try{
+    if(tp==='postos'){var wb=new XW(),ps=lc==='all'?state.postos:[curPosto()];ps.forEach(function(p){xPostoSheet(wb,p,months)});
+      xDownload(wb.build(),'Horarios_Postos'+(lc==='all'?'':'_'+pdfSafe(ps[0].name))+suf+'.xlsx');toast('Excel criado')}
+    else{var ms=lc==='all'?state.mapas:[curMapa()];
+      ms.forEach(function(m,i){setTimeout(function(){var wb=new XW();months.forEach(function(mo){xMapaSheet(wb,m,mo)});
+        xDownload(wb.build(),'Mapa_de_Horario_Trabalho_'+pdfSafe(m.name)+suf+'.xlsx')},i*400)});
+      toast(ms.length>1?'A criar '+ms.length+' ficheiros Excel…':'Excel criado')}
+  }catch(e){console.error(e);toast('Não foi possível criar o Excel')}
+}
+function xlsClick(a){if(a==='xlsgo'){xlsGo();return true}return false}
+function xlsInput(ev){var el=ev.target;if(el.name!=='xt')return false;var po=el.value==='postos';var c=modal.querySelector('#xlcur'),al=modal.querySelector('#xlall');if(c)c.textContent=po?curPosto().name:curMapa().name;if(al)al.textContent=po?'Todas no mesmo ficheiro':'9 ficheiros, um por localidade';return true}
+exportXlsx=function(){openExcel()};
+var _toolsClickX=toolsClick;toolsClick=function(a,b){if(xlsClick(a))return true;return _toolsClickX(a,b)};
+var _toolsInputX=toolsInput;toolsInput=function(ev){if(xlsInput(ev))return true;return _toolsInputX(ev)};
+
 // =====================================================================
 // ---------- MODO ONLINE (Supabase) ----------
 // Ativa-se só quando config.js tem o URL e a chave do Supabase.
